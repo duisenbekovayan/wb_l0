@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>WB Orders</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 24px auto; }
+    input { padding: 8px; width: 320px; }
+    button { padding: 8px 12px; }
+    pre { background:#f6f8fa; padding: 12px; border-radius: 8px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>Поиск заказа</h1>
+  <input id="uid" placeholder="order_uid"/>
+  <button onclick="load()">Найти</button>
+  <div id="result"></div>
+
+  <script>
+    async function load() {
+      const id = document.getElementById('uid').value.trim();
+      if (!id) return;
+      const r = await fetch(`/order/${id}`);
+      const box = document.getElementById('result');
+      if (!r.ok) { box.innerHTML = '<p>Не найдено</p>'; return; }
+      const data = await r.json();
+      box.innerHTML = `<h3>${data.order_uid}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+    }
+  </script>
+</body>
+</html>
