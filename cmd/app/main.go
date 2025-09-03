@@ -47,10 +47,16 @@ func main() {
 	api := httpapi.New(getenv("HTTP_ADDR", ":8080"), c, pg)
 	log.Printf("Connecting to Kafka broker: %s", getenv("KAFKA_BROKER", "localhost:9092"))
 	// Kafka consumer
+	broker := getenv("KAFKA_BROKER", "localhost:9092")
+	topic := getenv("KAFKA_TOPIC", "orders")
+	group := getenv("KAFKA_GROUP", "orders-consumer")
 	cons := kafka.NewConsumer(
-		[]string{getenv("KAFKA_BROKER", "localhost:9092")},
-		getenv("KAFKA_TOPIC", "orders"),
-		getenv("KAFKA_GROUP", "orders-consumer"),
+		kafka.Config{
+			Brokers:  []string{broker},
+			Topic:    topic,
+			GroupID:  group,
+			DLQTopic: "orders_dlq", // или "" чтобы отключить DLQ
+		},
 		pg, c,
 	)
 
@@ -59,6 +65,10 @@ func main() {
 		if err := cons.Run(ctx); err != nil {
 			log.Printf("consumer stopped: %v", err)
 		}
+	}()
+	defer func() {
+		cancel()
+		_ = cons.Close()
 	}()
 	go func() { _ = api.Start() }()
 
