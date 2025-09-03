@@ -45,10 +45,10 @@ func main() {
 
 	// HTTP
 	api := httpapi.New(getenv("HTTP_ADDR", ":8080"), c, pg)
-
+	log.Printf("Connecting to Kafka broker: %s", getenv("KAFKA_BROKER", "localhost:9092"))
 	// Kafka consumer
 	cons := kafka.NewConsumer(
-		[]string{getenv("KAFKA_BROKER", "kafka:9092")},
+		[]string{getenv("KAFKA_BROKER", "localhost:9092")},
 		getenv("KAFKA_TOPIC", "orders"),
 		getenv("KAFKA_GROUP", "orders-consumer"),
 		pg, c,

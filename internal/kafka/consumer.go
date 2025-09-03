@@ -34,7 +34,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 	for {
 		m, err := c.reader.ReadMessage(ctx)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err() // выходим только при отмене контекста
+			}
+			log.Printf("kafka read error: %v; retry in 2s", err)
+			time.Sleep(2 * time.Second)
+			continue
 		}
 		var o model.Order
 		if err := json.Unmarshal(m.Value, &o); err != nil {

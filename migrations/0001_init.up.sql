@@ -1,15 +1,26 @@
 CREATE TABLE IF NOT EXISTS deliveries (
   id SERIAL PRIMARY KEY,
-  name TEXT, phone TEXT, zip TEXT, city TEXT,
-  address TEXT, region TEXT, email TEXT
+  name TEXT,
+  phone TEXT,
+  zip TEXT,
+  city TEXT,
+  address TEXT,
+  region TEXT,
+  email TEXT
 );
 
 CREATE TABLE IF NOT EXISTS payments (
   id SERIAL PRIMARY KEY,
   transaction TEXT UNIQUE,
-  request_id TEXT, currency TEXT, provider TEXT,
-  amount INT, payment_dt BIGINT, bank TEXT,
-  delivery_cost INT, goods_total INT, custom_fee INT
+  request_id TEXT,
+  currency TEXT,
+  provider TEXT,
+  amount INT,
+  payment_dt BIGINT,
+  bank TEXT,
+  delivery_cost INT,
+  goods_total INT,
+  custom_fee INT
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -20,7 +31,8 @@ CREATE TABLE IF NOT EXISTS orders (
   internal_signature TEXT,
   customer_id TEXT,
   delivery_service TEXT,
-  shardkey TEXT, sm_id INT,
+  shardkey TEXT,
+  sm_id INT,
   date_created TIMESTAMPTZ,
   oof_shard TEXT,
   delivery_id INT REFERENCES deliveries(id) ON DELETE CASCADE,
