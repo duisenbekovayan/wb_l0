@@ -10,7 +10,7 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 
 	"github.com/duisenbekovayan/wb_l0/internal/cache"
-	"github.com/duisenbekovayan/wb_l0/internal/model"
+	model "github.com/duisenbekovayan/wb_l0/internal/models"
 	"github.com/duisenbekovayan/wb_l0/internal/storage"
 )
 

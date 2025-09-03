@@ -34,44 +34,71 @@ func (p *PG) InsertOrder(ctx context.Context, o model.Order) error {
 		}
 	}()
 
+	// 0) если заказ уже есть — выходим идемпотентно
+	var exists bool
+	if err = tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM orders WHERE order_uid=$1)`, o.OrderUID).
+		Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		// по желанию можно перечитать и обновить кэш снаружи
+		return tx.Commit()
+	}
+
+	// 1) delivery (можно без upsert)
 	var delID int
-	err = tx.QueryRowContext(ctx, `
+	if err = tx.QueryRowContext(ctx, `
 		INSERT INTO deliveries (name,phone,zip,city,address,region,email)
 		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 		o.Delivery.Name, o.Delivery.Phone, o.Delivery.Zip, o.Delivery.City,
-		o.Delivery.Address, o.Delivery.Region, o.Delivery.Email).Scan(&delID)
-	if err != nil {
+		o.Delivery.Address, o.Delivery.Region, o.Delivery.Email).Scan(&delID); err != nil {
 		return err
 	}
 
+	// 2) payments — UPSERT по уникальному transaction, вернуть id
 	var payID int
-	err = tx.QueryRowContext(ctx, `
+	if err = tx.QueryRowContext(ctx, `
 		INSERT INTO payments (transaction,request_id,currency,provider,amount,payment_dt,bank,delivery_cost,goods_total,custom_fee)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		ON CONFLICT (transaction) DO UPDATE SET
+			request_id=EXCLUDED.request_id,
+			currency=EXCLUDED.currency,
+			provider=EXCLUDED.provider,
+			amount=EXCLUDED.amount,
+			payment_dt=EXCLUDED.payment_dt,
+			bank=EXCLUDED.bank,
+			delivery_cost=EXCLUDED.delivery_cost,
+			goods_total=EXCLUDED.goods_total,
+			custom_fee=EXCLUDED.custom_fee
+		RETURNING id`,
 		o.Payment.Transaction, o.Payment.RequestID, o.Payment.Currency, o.Payment.Provider,
 		o.Payment.Amount, o.Payment.PaymentDT, o.Payment.Bank, o.Payment.DeliveryCost,
-		o.Payment.GoodsTotal, o.Payment.CustomFee).Scan(&payID)
-	if err != nil {
+		o.Payment.GoodsTotal, o.Payment.CustomFee).Scan(&payID); err != nil {
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO orders (order_uid,track_number,entry,locale,internal_signature,customer_id,delivery_service,shardkey,sm_id,date_created,oof_shard,delivery_id,payment_id)
+	// 3) orders — основной ключ order_uid уже уникален; если вдруг гонка — просто выходим
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO orders (order_uid,track_number,entry,locale,internal_signature,customer_id,
+		                    delivery_service,shardkey,sm_id,date_created,oof_shard,delivery_id,payment_id)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		ON CONFLICT (order_uid) DO NOTHING`,
 		o.OrderUID, o.TrackNumber, o.Entry, o.Locale, o.InternalSignature, o.CustomerID,
-		o.DeliveryService, o.ShardKey, o.SmID, o.DateCreated, o.OofShard, delID, payID)
-	if err != nil {
+		o.DeliveryService, o.ShardKey, o.SmID, o.DateCreated, o.OofShard, delID, payID); err != nil {
 		return err
 	}
 
+	// 4) items — чтобы не ловить дубли, почистим текущие и вставим заново
+	if _, err = tx.ExecContext(ctx, `DELETE FROM items WHERE order_uid=$1`, o.OrderUID); err != nil {
+		return err
+	}
 	for _, it := range o.Items {
-		_, err = tx.ExecContext(ctx, `
+		if _, err = tx.ExecContext(ctx, `
 			INSERT INTO items (chrt_id,track_number,price,rid,name,sale,size,total_price,nm_id,brand,status,order_uid)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 			it.ChrtID, it.TrackNumber, it.Price, it.RID, it.Name, it.Sale, it.Size,
-			it.TotalPrice, it.NmID, it.Brand, it.Status, o.OrderUID)
-		if err != nil {
+			it.TotalPrice, it.NmID, it.Brand, it.Status, o.OrderUID); err != nil {
 			return err
 		}
 	}
